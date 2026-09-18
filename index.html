@@ -53,9 +53,6 @@
   const TITLE_COLORS = ['#ff416c', '#ff5c86', '#ff8fb0', '#ffb3c9', '#ffd1e3'];
   const FRAME_COLORS = ['#ffb3c9', '#ffc9dd', '#ffd1e3', '#ffe3ee', '#fff5f9'];
 
-  // Пиксельный текст: строки растеризуются в офскрин-канвас 1:1 (1 ячейка = 1
-  // пиксель шрифта), затем каждая залитая ячейка рисуется квадратом p x p.
-  // Разрешение шрифта (fs) отвечает за разборчивость букв, p — за размер на экране.
   const mcv = document.createElement('canvas');
   const mctx = mcv.getContext('2d', { willReadFrequently: true });
   const fontOf = fs => '700 ' + fs + 'px Consolas, "Courier New", monospace';
@@ -74,7 +71,7 @@
     return lines;
   }
 
-  // Подбираем максимальный пиксель p, при котором текст влезает в availW x availH
+
   function measureFit(text, fs, p, availW, availH) {
     const lineH = Math.round(fs * 1.45);
     const cols = Math.floor(availW / p);
@@ -94,15 +91,14 @@
     return 0;
   }
 
-  // Общий пиксель для набора строк, чтобы все подписи были одного размера
+  
   function sharedPixel(texts, fs, availW, availH) {
     let p = Infinity;
     for (const t of texts) p = Math.min(p, bestPixel(t, fs, availW, availH));
     return p;
   }
 
-  // Пиксели букв делаем слегка хаотичными: своё смещение, размер, яркость,
-  // цвет и фаза мерцания у каждого блока + редкие «выбившиеся» точки вокруг
+
   function jitterCell(c, r, p, colors, noise) {
     const spread = noise ? p : Math.max(1, Math.round(p * 0.45));
     return {
@@ -152,7 +148,7 @@
 
     const cells = lit.map(([c, r]) => jitterCell(c - minC, r - minR, p, colors, false));
 
-    // Пиксельная пыль вокруг букв
+    
     const dust = Math.round(lit.length * 0.07);
     for (let i = 0; i < dust; i++) {
       const src = lit[Math.floor(Math.random() * lit.length)];
@@ -170,21 +166,23 @@
       cols: cols,
       rows: rows,
       p: p,
-      // зазор между пикселями, чтобы буквы не сливались в полосу
-      dot: Math.max(1, p - (p >= 6 ? 2 : 1))
+      // при крупных пикселях оставляем зазор, при мелких — сплошные блоки,
+      // иначе буквы распадаются
+      dot: p >= 6 ? p - 2 : p >= 4 ? p - 1 : p
     };
   }
 
-  // Перебор кегля от крупного к мелкому: первый, что влезает общим пикселем
+  
   function fitText(texts, availW, availH, fsList, colors) {
+    const minP = availW < 240 ? 2 : 3;
     for (const fs of fsList) {
       const p = sharedPixel(texts, fs, availW, availH);
-      if (p >= 3) {
+      if (p >= minP) {
         return texts.map(t => raster(t, fs, p, availW, availH, colors));
       }
     }
     const fs = fsList[fsList.length - 1];
-    const p = Math.max(2, bestPixel(texts[0], fs, availW, availH));
+    const p = Math.max(1, bestPixel(texts[0], fs, availW, availH));
     return texts.map(t => raster(t, fs, p, availW, availH, colors));
   }
 
@@ -220,7 +218,6 @@
   const FRAME_TEXT_MS = 700;
   const FRAME_STAGGER_MS = 400;
 
-  // Дождь из маленьких пиксельных сердечек во время подъёма надписи
   const SPARK_COUNT = 160;
   const SPARK_COLORS = ['#ff416c', '#ff77ab', '#ff9ec4', '#ffd1e3', '#ffe3ee'];
   const HEART_SPRITE = [
@@ -305,8 +302,7 @@
   let frames = [];
   let sparks = [];
 
-  // Позиция надписи в момент t (мс от начала подъёма) — нужна, чтобы сердечки
-  // вылетали прямо из букв
+  
   function titleYAt(t) {
     return title.yCenter + (title.yTop - title.yCenter) * easeInOut(clamp01(t / RISE_MS));
   }
@@ -342,22 +338,24 @@
 
   function buildLayout() {
     const pad = Math.round(Math.min(W, H) * 0.035);
+    // 2x2 сетка нужна и на телефоне; одна колонка остаётся только на совсем
+    // узких экранах, где две колонки физически не помещаются
+    const cols = W < 320 ? 1 : 2;
 
     const titleH = Math.max(40, H * 0.16);
-    title = fitText([TITLE_TEXT], W - pad * 2, titleH, [26, 22, 18, 15, 12, 10], TITLE_COLORS)[0];
+    title = fitText([TITLE_TEXT], W - pad * 2, titleH, [26, 22, 18, 15, 12, 10, 9], TITLE_COLORS)[0];
     title.x = cx - (title.cols * title.p) / 2;
     title.yCenter = cy - (title.rows * title.p) / 2;
     title.yTop = pad;
 
     const top = pad + title.rows * title.p + pad;
-    const cols = (W >= 720 && H >= 520) ? 2 : 1;
     const rows = Math.ceil(REASONS.length / cols);
     const fw = (W - pad * (cols + 1)) / cols;
     const fh = (H - top - pad * (rows + 1)) / rows;
     const b = Math.max(2, Math.round(Math.min(fw, fh) / 90));
 
     const inner = b * 5;
-    const texts = fitText(REASONS, fw - inner * 2, fh - inner * 2, [22, 19, 16, 14, 12, 10, 9], FRAME_COLORS);
+    const texts = fitText(REASONS, fw - inner * 2, fh - inner * 2, [22, 19, 16, 14, 12, 10, 9, 8], FRAME_COLORS);
 
     frames = REASONS.map((text, i) => {
       const fx = pad + (i % cols) * (fw + pad);
@@ -488,7 +486,6 @@
       if (t < 0 || t > s.life) continue;
 
       const k = t / s.life;
-      // плавное появление и затухание
       const fade = s.alpha * Math.min(1, k / 0.15) * (1 - k * k);
       if (fade <= 0.01) continue;
 
@@ -552,4 +549,4 @@
   requestAnimationFrame(frame);
 </script>
 </body>
-</html>
+</html>  
